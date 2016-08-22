@@ -10,13 +10,22 @@
  *******************************************************************************/
 package org.eclipse.che.api.workspace.server;
 
+import com.fasterxml.jackson.dataformat.yaml.snakeyaml.Yaml;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import org.eclipse.che.api.core.ConflictException;
 
 import javax.inject.Singleton;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+import static java.lang.String.format;
+import static java.util.Collections.singletonMap;
 
 /**
  * Adapts an old workspace configuration object format to a new format.
@@ -139,11 +148,110 @@ import javax.inject.Singleton;
 @Singleton
 public class WorkspaceConfigAdapter {
 
-    // TODO use input stream for detecting whether the object can be adapted
-    public JsonObject adapt(JsonObject sourceObj) throws ConflictException {
-        final JsonArray environments = sourceObj.getAsJsonArray("environments");
-        for (JsonElement environmentEl : environments) {
-            final JsonObject environmentObj = environmentEl.getAsJsonObject();
+    public JsonObject adapt(JsonObject confSourceObj) throws ConflictException {
+        final JsonArray oldEnvironmentsArr = confSourceObj.getAsJsonArray("environments");
+        final JsonObject newEnvironmentsObj = new JsonObject();
+        for (JsonElement oldEnvEl : oldEnvironmentsArr) {
+            final JsonObject oldEnvObj = oldEnvEl.getAsJsonObject();
+            final JsonObject newEnvObj = new JsonObject();
+
+            // Check the name first
+            if (!oldEnvObj.has("name")) {
+                throw new ConflictException("The format of the environment conflicts with a new format, name is missing");
+            }
+            final String envName = oldEnvObj.get("name").getAsString();
+
+            // Check machineConfigs field is present
+            if (!oldEnvObj.has("machineConfigs") || !oldEnvObj.get("machineConfigs").isJsonArray()) {
+                throw new ConflictException("The format of the environment is unappropriated");
+            }
+
+            // Convert old machine configs to new ones
+            final Map<String, Service> services = new HashMap<>();
+            final JsonObject newMachinesObj = new JsonObject();
+            for (JsonElement machineConfigEl : oldEnvObj.get("machineConfigs").getAsJsonArray()) {
+                if (!machineConfigEl.isJsonObject()) {
+                    throw new ConflictException(format("The format of the machine in environment '%s' conflicts with a new format",
+                                                       envName));
+                }
+                final JsonObject oldMachineConfObj = machineConfigEl.getAsJsonObject();
+                final JsonObject newMachineObj = new JsonObject();
+
+                // Check the name field is present
+                if (!oldMachineConfObj.has("name")) {
+                    throw new ConflictException(format("The format of the machine in environment '%s' " +
+                                                       "conflicts with a new format, machine name is missing",
+                                                       envName));
+                }
+                final String machineName = oldMachineConfObj.get("name").getAsString();
+
+                // If machine is dev machine then new machine must contain ws-agent in agents list
+                if (oldMachineConfObj.has("dev")) {
+                    final JsonElement dev = oldMachineConfObj.get("dev");
+                    if (dev.isJsonPrimitive() && dev.getAsBoolean()) {
+                        final JsonArray agents = new JsonArray();
+                        agents.add(new JsonPrimitive("ws-agent"));
+                        newMachineObj.add("agents", agents);
+                    }
+                }
+
+                // Convert services
+                if (oldMachineConfObj.has("servers")) {
+                    if (!oldMachineConfObj.get("servers").isJsonArray()) {
+                        throw new ConflictException(format("The format of the servers in machine '%s:%s' conflicts with a new format",
+                                                           envName,
+                                                           machineName));
+                    }
+                    final JsonObject newServersObj = new JsonObject();
+                    for (JsonElement serversEl : oldMachineConfObj.get("servers").getAsJsonArray()) {
+                        if (!serversEl.isJsonObject()) {
+                            throw new ConflictException(format("The format of servers in machine '%s:%s' conflicts with a new format",
+                                                               envName,
+                                                               machineName));
+                        }
+                        final JsonObject oldServerObj = serversEl.getAsJsonObject();
+                        if (!oldServerObj.has("ref")) {
+                            throw new ConflictException(format("The format of server in machine '%s:%s' conflicts with a new format",
+                                                               envName,
+                                                               machineName));
+                        }
+                        final String ref = oldServerObj.get("ref").getAsString();
+                        final JsonObject newServerObj = new JsonObject();
+                        if (oldServerObj.has("port")) {
+                            newServerObj.add("port", oldServerObj.get("port"));
+                        }
+                        if (oldServerObj.has("protocol")) {
+                            newServerObj.add("protocol", oldServerObj.get("protocol"));
+                        }
+                        newServersObj.add(ref, newServerObj);
+                    }
+                    newMachineObj.add("servers", newServersObj);
+                }
+                newMachinesObj.add(machineName, newMachineObj);
+            }
+            newEnvObj.add("machines", newMachinesObj);
+
+            // Adapt recipe
+            final JsonObject recipeObj = new JsonObject();
+            recipeObj.addProperty("type", "compose");
+            recipeObj.addProperty("contentType", "application/x-yaml");
+            recipeObj.addProperty("content", new Yaml().dumpAsMap(singletonMap("services", services)));
+
+            newEnvObj.add("recipe", recipeObj);
+            newEnvironmentsObj.add(envName, newEnvObj);
         }
+        confSourceObj.add("environments", newEnvironmentsObj);
+        return confSourceObj;
+    }
+
+    private static class Service extends HashMap<String, Object> {
+        public Service setMemoryLimit(int memoryLimit) {
+            put("mem_limit", memoryLimit);
+            return this;
+        }
+    }
+
+    private static class Build {
+
     }
 }
