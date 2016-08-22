@@ -32,20 +32,21 @@ import javax.inject.Singleton;
  *              "name": "dev-env",
  *              "machineConfigs": [
  *                  {
- *                      "name": "default",
+ *                      "name": "dev", <- goes to recipe content
  *                      "limits": {
- *                          "ram": 1000
+ *                          "ram": 2048 <- in bytes
  *                      },
- *                      "source": {
- *                          "location": "stub",
+ *                      "source": { <- goes to recipe content
+ *                          "location": "https://somewhere/Dockerfile",
  *                          "type": "dockerfile"
  *                      },
- *                      "type": "docker", <- no
+ *                      "type": "docker", <- will be defined by environment recipe type
  *                      "dev": true, <- if agents contain 'ws-agent'
- *                      "envVariables" : {
- *                          "env1" : "value1"
+ *                      "envVariables" : { <- goes to recipe content
+ *                          "env1" : "value1",
+ *                          "env2" : "value2
  *                      },
- *                      "servers" : [ <- the format is different
+ *                      "servers" : [ <- goes to machine definition
  *                          {
  *                              {
  *                                  "ref" : "some_reference",
@@ -53,6 +54,26 @@ import javax.inject.Singleton;
  *                                  "protocol" : "some_protocol",
  *                                  "path" : "/some/path"
  *                              }
+ *                          }
+ *                      ]
+ *                  }
+ *                  {
+ *                      "name" : "db",
+ *                      "limits" : {
+ *                          "ram": 2048 <- in bytes
+ *                      },
+ *                      "source" : {
+ *                          "type" : "image",
+ *                          "location" : "codenvy/ubuntu_jdk8"
+ *                      },
+ *                      "type" : "docker",
+ *                      "dev" : false,
+ *                      "servers" : [
+ *                          {
+ *                              "ref" : "db_server",
+ *                              "port" : "3311/tcp",
+ *                              "protocol" : "db-protocol",
+ *                              "path" : "db-path"
  *                          }
  *                      ]
  *                  }
@@ -69,18 +90,41 @@ import javax.inject.Singleton;
  *      "environments" : {
  *          "dev-env" : {
  *              "recipe" : {
+ *                  "type" : "compose",
  *                  "contentType" : "application/x-yaml",
- *
+ *                  "content" : "
+ *                      services :
+ *                          dev-machine:
+ *                              build:
+ *                                  context: https://somewhere/Dockerfile
+ *                              mem_limit: 2147483648
+ *                              environment:
+ *                                  - env1=value1
+ *                                  - env2=value2
+ *                          db:
+ *                              image : codenvy/ubuntu_jdk8
+ *                              mem_limit: 2147483648
+ *                  "
  *              },
- *              "machines" : [
- *                  {
+ *              "machines" : {
+ *                  "dev-machine" : {
  *                      "agents" : [ "exec-agent", "ws-agent" ],
  *                      "servers" : {
  *                          "some_reference" : {
- *                          "port" : "9090/udp",
- *                          "protocol" : "some_protocol",
- *                          "properties" : {
- *                              "prop1" : "value1"
+ *                              "port" : "9090/udp",
+ *                              "protocol" : "some_protocol",
+ *                              "properties" : {
+ *                                  "prop1" : "value1"
+ *                              }
+ *                          }
+ *                      }
+ *                  },
+ *                  "db" : {
+ *                      "servers" : {
+ *                          "db_server" : {
+ *                              "port" : "3311/tcp",
+ *                              "protocol" : "db-protocol",
+ *                              "path" : "db-path"
  *                          }
  *                      }
  *                  }
@@ -88,7 +132,6 @@ import javax.inject.Singleton;
  *          }
  *      }
  * }
- *
  * </pre>
  *
  * @author Yevhenii Voevodin
@@ -98,13 +141,9 @@ public class WorkspaceConfigAdapter {
 
     // TODO use input stream for detecting whether the object can be adapted
     public JsonObject adapt(JsonObject sourceObj) throws ConflictException {
-        if (!sourceObj.has("environments") || !sourceObj.get("environments").isJsonArray()) {
-            return sourceObj;
-        }
         final JsonArray environments = sourceObj.getAsJsonArray("environments");
         for (JsonElement environmentEl : environments) {
             final JsonObject environmentObj = environmentEl.getAsJsonObject();
-
         }
     }
 }
