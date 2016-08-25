@@ -39,6 +39,7 @@ import java.io.IOException;
  *
  * @see DockerInstanceProvider#buildImage(MachineConfig, String, boolean, ProgressMonitor)
  */
+@Deprecated
 public class EnableOfflineDockerMachineBuildInterceptor implements MethodInterceptor {
     @Inject
     DockerConnector                               dockerConnector;

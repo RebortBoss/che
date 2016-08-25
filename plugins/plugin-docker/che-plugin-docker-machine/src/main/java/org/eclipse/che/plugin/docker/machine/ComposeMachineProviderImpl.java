@@ -10,6 +10,7 @@
  *******************************************************************************/
 package org.eclipse.che.plugin.docker.machine;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ObjectArrays;
@@ -582,7 +583,8 @@ public class ComposeMachineProviderImpl implements ComposeMachineInstanceProvide
      *         path to escape
      * @return escaped path
      */
-    private String escapePath(String path) {
+    @VisibleForTesting
+    String escapePath(String path) {
         String esc;
         if (path.indexOf(":") == 1) {
             //check and replace only occurrence of ":" after disk label on Windows host (e.g. C:/)

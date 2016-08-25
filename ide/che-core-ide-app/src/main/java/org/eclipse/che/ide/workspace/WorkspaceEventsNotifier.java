@@ -314,7 +314,7 @@ public class WorkspaceEventsNotifier {
                                                   new ConfirmCallback() {
                                                       @Override
                                                       public void accepted() {
-                                                          startWorkspacePresenter.show(workspaces, callback);
+//                                                          startWorkspacePresenter.show(workspaces, callback);
                                                       }
                                                   }).show();
             }
