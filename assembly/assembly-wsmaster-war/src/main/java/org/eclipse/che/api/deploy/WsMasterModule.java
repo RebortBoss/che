@@ -14,7 +14,9 @@ import com.google.inject.AbstractModule;
 import com.google.inject.multibindings.Multibinder;
 import com.google.inject.name.Names;
 
+import org.eclipse.che.api.core.rest.MessageBodyAdapter;
 import org.eclipse.che.api.machine.shared.Constants;
+import org.eclipse.che.api.workspace.server.WorkspaceMessageBodyAdapter;
 import org.eclipse.che.inject.DynaModule;
 
 /** @author andrew00x */
@@ -86,6 +88,9 @@ public class WsMasterModule extends AbstractModule {
 
         bind(org.eclipse.che.api.environment.server.compose.ComposeMachineInstanceProvider.class)
                 .to(org.eclipse.che.plugin.docker.machine.ComposeMachineProviderImpl.class);
+
+        final Multibinder<MessageBodyAdapter> adapters = Multibinder.newSetBinder(binder(), MessageBodyAdapter.class);
+        adapters.addBinding().to(WorkspaceMessageBodyAdapter.class);
 
         install(new org.eclipse.che.api.core.rest.CoreRestModule());
         install(new org.eclipse.che.api.core.util.FileCleaner.FileCleanerModule());

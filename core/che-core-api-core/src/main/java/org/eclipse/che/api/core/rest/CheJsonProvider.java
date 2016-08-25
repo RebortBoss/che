@@ -44,6 +44,7 @@ import java.util.Set;
 /**
  * Implementation of {@link MessageBodyReader} and {@link MessageBodyWriter} needed for binding JSON content to and from Java Objects.
  *
+ * @author Yevhenii Voevodin
  * @author andrew00x
  * @see DTO
  * @see DtoFactory
@@ -53,12 +54,17 @@ import java.util.Set;
 @Produces({MediaType.APPLICATION_JSON})
 @Consumes({MediaType.APPLICATION_JSON})
 public class CheJsonProvider<T> implements MessageBodyReader<T>, MessageBodyWriter<T> {
-    private Set<Class> ignoredClasses;
-    private final JsonEntityProvider delegate = new JsonEntityProvider<>();
+
+    private final Set<Class>                 ignoredClasses;
+    private final MessageBodyAdapterProvider adapterProvider;
+    private final JsonEntityProvider         delegate;
 
     @Inject
-    public CheJsonProvider(@Nullable @Named("che.json.ignored_classes") Set<Class> ignoredClasses) {
-        this.ignoredClasses = ignoredClasses == null ? new LinkedHashSet<Class>() : new LinkedHashSet<>(ignoredClasses);
+    public CheJsonProvider(@Nullable @Named("che.json.ignored_classes") Set<Class> ignoredClasses,
+                           MessageBodyAdapterProvider messageBodyAdapter) {
+        this.delegate = new JsonEntityProvider<>();
+        this.ignoredClasses = ignoredClasses == null ? new LinkedHashSet<>() : new LinkedHashSet<>(ignoredClasses);
+        this.adapterProvider = messageBodyAdapter;
     }
 
     @SuppressWarnings("unchecked")
@@ -97,21 +103,28 @@ public class CheJsonProvider<T> implements MessageBodyReader<T>, MessageBodyWrit
 
     @SuppressWarnings("unchecked")
     @Override
-    public T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType,
-                      MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+    public T readFrom(Class<T> type,
+                      Type genericType,
+                      Annotation[] annotations,
+                      MediaType mediaType,
+                      MultivaluedMap<String, String> httpHeaders,
+                      InputStream entityStream) throws IOException, WebApplicationException {
+        final MessageBodyAdapter adapter = adapterProvider.getAdapter(type, genericType);
+        final InputStream bodyStream = adapter == null ? entityStream : adapter.adapt(entityStream);
         if (type.isAnnotationPresent(DTO.class)) {
-            return DtoFactory.getInstance().createDtoFromJson(entityStream, type);
-        } else if (type.isAssignableFrom(List.class) && genericType instanceof ParameterizedType) {
+            return DtoFactory.getInstance().createDtoFromJson(bodyStream, type);
+        }
+        if (type.isAssignableFrom(List.class) && genericType instanceof ParameterizedType) {
             ParameterizedType parameterizedType = (ParameterizedType)genericType;
             Type elementType = parameterizedType.getActualTypeArguments()[0];
             if (elementType instanceof Class) {
                 Class elementClass = (Class)elementType;
                 if (elementClass.isAnnotationPresent(DTO.class)) {
-                    return (T)DtoFactory.getInstance().createListDtoFromJson(entityStream, elementClass);
+                    return (T)DtoFactory.getInstance().createListDtoFromJson(bodyStream, elementClass);
                 }
             }
         }
-        return (T)delegate.readFrom(type, genericType, annotations, mediaType, httpHeaders, entityStream);
+        return (T)delegate.readFrom(type, genericType, annotations, mediaType, httpHeaders, bodyStream);
     }
 
     /**
